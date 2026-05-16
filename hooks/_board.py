@@ -1,9 +1,11 @@
 """
-共享辅助：所有 hook 都需要的两件事
-  1. 调试日志：环境变量 CLAUDE_BOARD_DEBUG_LOG 指向一个文件路径，
-     hook 会把收到的 payload 完整追加进去。无 env var 则零开销。
-  2. is_subagent / is_phantom：判断是否是不该上报的"幻象会话"
-     （subagent、slash 命令、临时 print 子进程等）。
+共享辅助：
+  1. debug_log()    — CLAUDE_BOARD_DEBUG_LOG 开关，写 payload 到文件
+  2. is_session_start_phantom() — 仅判断"SessionStart 该不该建新卡"
+       适用：SessionStart（subagent / slash / print 类的子进程不该建主卡）
+  3. effective_session_id() — 返回应该归属的 session_id
+       原则：subagent 的 task/message/stop 事件归到 parent session 名下，
+       让 Claude 用 Agent 工具时的子任务能"流回主卡"，而不是另开一张卡。
 """
 
 import json
@@ -13,7 +15,6 @@ from pathlib import Path
 
 
 def debug_log(stage: str, payload: dict, extra: dict | None = None):
-    """开关：环境变量 CLAUDE_BOARD_DEBUG_LOG = <文件路径>。"""
     log = os.environ.get("CLAUDE_BOARD_DEBUG_LOG")
     if not log:
         return
@@ -29,29 +30,38 @@ def debug_log(stage: str, payload: dict, extra: dict | None = None):
         pass
 
 
-# 已知的 source / kind 值——任何包含这些的会话都被认为不该上报
-_SKIP_SOURCES = {"subagent", "slash", "print", "agent", "compact"}
-_SKIP_KINDS   = {"subagent", "agent"}
+# SessionStart 时这些 source/kind 不该建主卡（避免幽灵）
+_PHANTOM_SOURCES = {"subagent", "slash", "print", "agent", "compact"}
+_PHANTOM_KINDS   = {"subagent", "agent"}
 
 
-def should_skip(payload: dict) -> tuple[bool, str]:
-    """返回 (skip?, reason)。reason 用于调试日志。"""
-    src = (payload.get("source") or "").lower()
-    if src in _SKIP_SOURCES:
-        return True, f"source={src}"
-
-    kind = (payload.get("kind") or payload.get("session_kind") or "").lower()
-    if kind in _SKIP_KINDS:
-        return True, f"kind={kind}"
-
-    # 任何带"父会话"标识的都是子会话
+def _parent_id(payload: dict):
     for k in ("parent_session_id", "parentSessionId", "parent_id"):
         v = payload.get(k)
         if v:
-            return True, f"{k}={v}"
+            return str(v)
+    return None
 
-    # SessionStart 显式标记
+
+def is_session_start_phantom(payload: dict) -> tuple[bool, str]:
+    """SessionStart 专用：是否是幽灵子会话（不该建主卡）。"""
+    src = (payload.get("source") or "").lower()
+    if src in _PHANTOM_SOURCES:
+        return True, f"source={src}"
+    kind = (payload.get("kind") or payload.get("session_kind") or "").lower()
+    if kind in _PHANTOM_KINDS:
+        return True, f"kind={kind}"
+    pid = _parent_id(payload)
+    if pid:
+        return True, f"parent={pid}"
     if payload.get("is_subagent") or payload.get("isSubagent"):
         return True, "is_subagent=true"
-
     return False, ""
+
+
+def effective_session_id(payload: dict) -> str:
+    """活动事件（message / task_*）专用：如果是 subagent 触发的，
+    返回 parent session_id；否则返回自身。让所有子事件"流回主卡"。"""
+    return (_parent_id(payload)
+            or (payload.get("session_id") or "").strip()
+            or os.environ.get("CLAUDE_SESSION_ID", "").strip())

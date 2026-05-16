@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _board import debug_log, should_skip   # noqa: E402
+from _board import debug_log, is_session_start_phantom   # noqa: E402
 
 DAEMON = os.environ.get("CLAUDE_BOARD_URL", "http://localhost:7820")
 
@@ -50,7 +50,7 @@ def main():
         return
 
     # 跳过 subagent / slash 命令 / 临时 print 子进程等"幻象会话"
-    skip, reason = should_skip(payload)
+    skip, reason = is_session_start_phantom(payload)
     if skip:
         debug_log("SessionStart-SKIPPED", payload, {"reason": reason})
         return

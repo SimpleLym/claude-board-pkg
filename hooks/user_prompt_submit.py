@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _board import debug_log, should_skip   # noqa: E402
+from _board import debug_log, effective_session_id   # noqa: E402
 
 DAEMON = os.environ.get("CLAUDE_BOARD_URL", "http://localhost:7820")
 MAX_USER_CHARS = 4000
@@ -64,16 +64,10 @@ def main():
     except Exception:
         return
 
-    debug_log("UserPromptSubmit", payload)
-
-    session_id = (payload.get("session_id")
-                  or os.environ.get("CLAUDE_SESSION_ID", "")).strip()
+    # subagent 的 prompt 也归到 parent（如果有）
+    session_id = effective_session_id(payload).strip()
+    debug_log("UserPromptSubmit", payload, {"effective_sid": session_id})
     if not session_id:
-        return
-
-    skip, reason = should_skip(payload)
-    if skip:
-        debug_log("UserPromptSubmit-SKIPPED", payload, {"reason": reason})
         return
 
     prompt = (payload.get("prompt") or "").strip()
@@ -87,23 +81,24 @@ def main():
            or os.environ.get("CLAUDE_PROJECT_DIR")
            or os.getcwd())
 
+    title = derive_title(prompt)
+
+    # 顺序很关键：message 是创建行的活动事件，先发并把 title 塞进去，
+    # daemon 创建行时直接用这个标题，避免"Untitled → 真实标题"那一闪。
     post_event({
-        "type":       "session_init",
-        "session_id": session_id,
-        "project":    cwd,
+        "type":          "message",
+        "session_id":    session_id,
+        "role":          "user",
+        "content":       prompt[:MAX_USER_CHARS],
+        "title_default": title,         # 创建行时用作初始 title
+        "project":       cwd,           # 创建行时用作 project
     })
 
+    # 若行已存在且 title 还是 'Untitled'（比如老会话被 resume），补一刀更新
     post_event({
         "type":       "session_title_default",
         "session_id": session_id,
-        "title":      derive_title(prompt),
-    })
-
-    post_event({
-        "type":       "message",
-        "session_id": session_id,
-        "role":       "user",
-        "content":    prompt[:MAX_USER_CHARS],
+        "title":      title,
     })
 
 

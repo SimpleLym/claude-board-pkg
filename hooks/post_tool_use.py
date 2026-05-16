@@ -17,7 +17,7 @@ import urllib.error
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _board import debug_log, should_skip   # noqa: E402
+from _board import debug_log, effective_session_id   # noqa: E402
 
 DAEMON = os.environ.get("CLAUDE_BOARD_URL", "http://localhost:7820")
 
@@ -129,16 +129,12 @@ def main():
     except Exception:
         return
 
-    debug_log("PostToolUse", payload, {"tool": payload.get("tool_name")})
-
-    session_id = (payload.get("session_id")
-                  or os.environ.get("CLAUDE_SESSION_ID", "")).strip()
+    # 关键：subagent 触发的任务/编辑事件，要归到 parent session 名下，
+    # 让 Claude 在主对话里用 Agent 工具开子任务时，进度仍流回主卡。
+    session_id = effective_session_id(payload).strip()
+    debug_log("PostToolUse", payload,
+              {"tool": payload.get("tool_name"), "effective_sid": session_id})
     if not session_id:
-        return
-
-    skip, reason = should_skip(payload)
-    if skip:
-        debug_log("PostToolUse-SKIPPED", payload, {"reason": reason})
         return
 
     tool_name = payload.get("tool_name", "")

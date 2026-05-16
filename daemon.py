@@ -470,10 +470,13 @@ def process_event(data: dict):
     if not row_exists:
         if etype not in ACTIVITY_EVENTS:
             return False
+        # 创建行时，如果事件里捎带了 title_default（user_prompt_submit 会塞），
+        # 就用它代替"Untitled"——这样第一次广播就有真实标题，看板上看不到闪。
+        init_title = (data.get("title_default") or "").strip() or "Untitled"
         db.execute("""
             INSERT INTO sessions (id, title, project, created_at, updated_at)
-            VALUES (?, 'Untitled', ?, ?, ?)
-        """, (sid, data.get("project", ""), ts, ts))
+            VALUES (?, ?, ?, ?, ?)
+        """, (sid, init_title, data.get("project", ""), ts, ts))
 
     changed = True
 

@@ -15,7 +15,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _board import debug_log, should_skip   # noqa: E402
+from _board import debug_log, effective_session_id   # noqa: E402
 
 DAEMON = os.environ.get("CLAUDE_BOARD_URL", "http://localhost:7820")
 MAX_ASSISTANT_CHARS = 4000
@@ -136,16 +136,10 @@ def main():
     except Exception:
         payload = {}
 
-    debug_log("Stop", payload)
-
-    session_id = (payload.get("session_id")
-                  or os.environ.get("CLAUDE_SESSION_ID", "")).strip()
+    # subagent 的 Stop 也归到 parent，让 token 用量计入主卡
+    session_id = effective_session_id(payload).strip()
+    debug_log("Stop", payload, {"effective_sid": session_id})
     if not session_id:
-        return
-
-    skip, reason = should_skip(payload)
-    if skip:
-        debug_log("Stop-SKIPPED", payload, {"reason": reason})
         return
 
     # 兜底找 transcript：先看 payload 已知字段，再 env var，最后按 session_id
