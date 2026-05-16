@@ -127,6 +127,7 @@ def _init_db(conn: sqlite3.Connection):
         ("cache_read_tokens",     "INTEGER NOT NULL DEFAULT 0"),
         ("cache_creation_tokens", "INTEGER NOT NULL DEFAULT 0"),
         ("last_context_tokens",   "INTEGER NOT NULL DEFAULT 0"),
+        ("model",                 "TEXT"),
     ]:
         if col not in cols:
             conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} {ddl}")
@@ -350,8 +351,26 @@ def known_projects() -> list[str]:
 
 # ─── State Serialization ─────────────────────────────────────────────────────
 
+# 超过这个时长没有任何事件的 session，自动标 ended（处理直接关 shell 的情况）
+SESSION_STALE_HOURS = 4
+
+def _auto_end_stale_sessions(db: sqlite3.Connection) -> int:
+    """把 4 小时没动静的活跃会话自动标 ended_at = updated_at。返回标了几条。"""
+    cutoff = (datetime.now() - timedelta(hours=SESSION_STALE_HOURS)
+              ).isoformat(timespec="seconds")
+    cur = db.execute("""
+        UPDATE sessions
+        SET ended_at = updated_at
+        WHERE ended_at IS NULL AND updated_at < ?
+    """, (cutoff,))
+    if cur.rowcount:
+        db.commit()
+    return cur.rowcount
+
+
 def get_full_state() -> dict:
     db = get_db()
+    _auto_end_stale_sessions(db)
 
     sessions = [dict(r) for r in db.execute(
         "SELECT * FROM sessions ORDER BY updated_at DESC"
@@ -542,7 +561,6 @@ def process_event(data: dict):
         db.execute("UPDATE sessions SET updated_at=? WHERE id=?", (ts, sid))
 
     elif etype == "session_usage":
-        # 从 stop hook 解析 transcript 后推过来的累计 token 数
         try:
             it = int(data.get("input_tokens") or 0)
             ot = int(data.get("output_tokens") or 0)
@@ -551,6 +569,7 @@ def process_event(data: dict):
             ctx = int(data.get("last_context_tokens") or 0)
         except (TypeError, ValueError):
             return False
+        model = (data.get("model") or "").strip() or None
         db.execute("""
             UPDATE sessions SET
                 input_tokens          = ?,
@@ -558,9 +577,10 @@ def process_event(data: dict):
                 cache_read_tokens     = ?,
                 cache_creation_tokens = ?,
                 last_context_tokens   = ?,
+                model                 = COALESCE(?, model),
                 updated_at            = ?
             WHERE id = ?
-        """, (it, ot, cr, cc, ctx, ts, sid))
+        """, (it, ot, cr, cc, ctx, model, ts, sid))
 
     elif etype == "session_delete":
         # 物理删除整个会话（连同 tasks / rounds）

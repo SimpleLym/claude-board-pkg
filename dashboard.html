@@ -514,12 +514,16 @@ body{font-family:var(--font-sans);font-size:13px;color:#0D1525;
 .tv-task-time{font-size:10px;color:#A8B5C8;font-family:var(--font-mono)}
 .tv-task-ended{font-size:9px;color:#9A3412;background:#FFF7ED;border:0.5px solid #FDBA74;
   border-radius:3px;padding:0 5px}
-.tv-task-del{position:absolute;top:5px;right:5px;width:18px;height:18px;border-radius:4px;
+.tv-task-del,.tv-task-done{position:absolute;top:5px;width:18px;height:18px;border-radius:4px;
   background:#fff;border:0.5px solid #DDE4EE;color:#A8B5C8;font-size:11px;line-height:1;
   display:none;align-items:center;justify-content:center;cursor:pointer;transition:all .12s;
   font-family:var(--font-sans);padding:0}
-.tv-task:hover .tv-task-del{display:flex}
+.tv-task-del{right:5px}
+.tv-task-done{right:27px}
+.tv-task:hover .tv-task-del,
+.tv-task:hover .tv-task-done{display:flex}
 .tv-task-del:hover{background:#FEE2E2;border-color:#FCA5A5;color:#B91C1C}
+.tv-task-done:hover{background:#ECFDF5;border-color:#6EE7B7;color:#047857}
 
 /* ── Toast ────────────────────────────────────────────────────────── */
 .toast-wrap{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:99;pointer-events:none}
@@ -679,8 +683,17 @@ function fmtDuration(ms){
   return rh ? `${d}d ${rh}h` : `${d}d`;
 }
 
-// Claude 200k context window
-const MAX_CTX = 200_000;
+// Claude 模型 context window 上限（model name 子串匹配，从大到小匹配）
+// 实测 claude-opus-4-7 cache_read 单轮可到 500k+，说明确实有 1M context
+const MODEL_CTX = [
+  [/opus-4-7|sonnet-4-6|claude-4|opus-5|sonnet-5/, 1_000_000],
+  [/opus-3|sonnet-3|haiku/,                          200_000],
+];
+function ctxWindowFor(model){
+  if (!model) return 1_000_000;     // 默认按当前主流模型给 1M，宁多勿少
+  for (const [re, n] of MODEL_CTX) if (re.test(model)) return n;
+  return 1_000_000;
+}
 
 function projLabel(p){
   return (p||'(未知项目)')
@@ -1387,6 +1400,9 @@ function tvRenderTask(t){
          <i class="ti ti-message-circle" style="font-size:10px" aria-hidden="true"></i>
          ${esc(t.session_title)}
        </span>`;
+  // 仅会话 task 支持「✓ 标完成」（TASKS.md 项目计划应该由 Claude Edit 文件来更新）
+  const doneBtn = (t.status !== 'completed' && t.source !== 'plan')
+    ? `<button class="tv-task-done" data-act="tv-done" title="手动标记为已完成">✓</button>` : '';
   const delBtn = t.status === 'pending'
     ? `<button class="tv-task-del" data-act="tv-delete" title="删除这条任务">×</button>` : '';
   return `
@@ -1394,8 +1410,9 @@ function tvRenderTask(t){
          data-source="${esc(t.source)}"
          data-sid="${esc(t.session_id || '')}"
          data-proj="${esc(t.session_proj || '')}"
-         data-tid="${esc(t.task_id || '')}">
-      ${delBtn}
+         data-tid="${esc(t.task_id || '')}"
+         data-content="${esc(t.content)}">
+      ${doneBtn}${delBtn}
       <div class="tv-task-text">${esc(t.content)}</div>
       <div class="tv-task-meta">
         ${srcChip}
@@ -1431,7 +1448,39 @@ document.addEventListener('click', (ev) => {
       target,
     );
   }
+  if (act === 'tv-done'){
+    tvMarkDone(
+      taskEl.dataset.sid,
+      taskEl.dataset.tid,
+      taskEl.dataset.content,
+      target,
+    );
+  }
 });
+
+function tvMarkDone(sid, taskId, content, btn){
+  btn.disabled = true; btn.textContent = '…';
+  fetch('/api/event', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      type: 'task_upsert',
+      session_id: sid,
+      task_id: taskId,
+      content: content,
+      status: 'completed',
+    }),
+  }).then(r => r.json()).then(j => {
+    if (j && j.changed){
+      showToast('已标完成');
+    } else {
+      showToast('失败：' + ((j && j.error) || 'unknown'));
+      btn.disabled = false; btn.textContent = '✓';
+    }
+  }).catch(e => {
+    showToast('网络错误：' + e.message);
+    btn.disabled = false; btn.textContent = '✓';
+  });
+}
 
 function tvDoDelete(source, sid, project, taskId, btn){
   const label = source === 'plan' ? '从 TASKS.md 中删除这一行？' : '删除这条任务？';
@@ -1529,8 +1578,10 @@ function buildCardHTML(s){
   const totalTok = (s.input_tokens||0) + (s.output_tokens||0)
                  + (s.cache_read_tokens||0) + (s.cache_creation_tokens||0);
   const ctxTok = s.last_context_tokens || 0;
-  const ctxPct = ctxTok / MAX_CTX;
-  const ctxCls = ctxPct >= 0.85 ? ' crit' : (ctxPct >= 0.6 ? ' warn' : '');
+  const ctxMax = ctxWindowFor(s.model);
+  const ctxPctRaw = ctxTok / ctxMax;
+  const ctxPct = Math.min(1, ctxPctRaw);   // 上限 100% 显示
+  const ctxCls = ctxPctRaw >= 0.85 ? ' crit' : (ctxPctRaw >= 0.6 ? ' warn' : '');
 
   // 持续时长：已结束用 ended_at；进行中用现在
   const startMs = s.created_at ? new Date(s.created_at).getTime() : 0;
@@ -1547,8 +1598,8 @@ function buildCardHTML(s){
       <span class="stat dur" title="会话时长（从 ${esc(s.created_at||'未知')} 起）">
         <span class="stat-ic">⏱</span><span class="stat-num">${esc(durStr)}</span>
       </span>
-      <span class="stat ctx${ctxCls}" title="最近 context 占用：${fmtNum(ctxTok)} / ${fmtNum(MAX_CTX)} (${(ctxPct*100).toFixed(1)}%)">
-        <span class="stat-ic">📊</span><span class="stat-num">${ctxTok ? (ctxPct*100).toFixed(0)+'%' : '—'}</span>
+      <span class="stat ctx${ctxCls}" title="最近 context 占用：${fmtNum(ctxTok)} / ${fmtNum(ctxMax)} (${(ctxPctRaw*100).toFixed(1)}%)${s.model ? ' · ' + s.model : ''}">
+        <span class="stat-ic">📊</span><span class="stat-num">${ctxTok ? Math.round(ctxPct*100)+'%' : '—'}</span>
       </span>
     </div>`;
 

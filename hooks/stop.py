@@ -49,6 +49,7 @@ def extract_usage_totals(transcript_path: str) -> dict:
 
     it = ot = cr = cc = 0
     last_ctx = 0
+    last_model = ""
     for line in lines:
         line = line.strip()
         if not line:
@@ -71,12 +72,15 @@ def extract_usage_totals(transcript_path: str) -> dict:
         last_ctx = (int(u.get("input_tokens") or 0)
                     + int(u.get("cache_read_input_tokens") or 0)
                     + int(u.get("cache_creation_input_tokens") or 0))
+        if msg.get("model"):
+            last_model = str(msg["model"])
     return {
         "input_tokens": it,
         "output_tokens": ot,
         "cache_read_tokens": cr,
         "cache_creation_tokens": cc,
         "last_context_tokens": last_ctx,
+        "model": last_model,
     }
 
 
