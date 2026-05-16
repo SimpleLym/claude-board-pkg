@@ -1,0 +1,267 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.board{background:#EDF1F8;background-image:url("data:image/svg+xml,%3Csvg width='24' height='24' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='1.5' cy='1.5' r='1' fill='%23C4CEDF'/%3E%3C/svg%3E");border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;display:flex;flex-direction:column;min-height:720px;font-family:var(--font-sans);font-size:13px}
+
+.hdr{height:50px;background:#fff;border-bottom:0.5px solid #DDE4EE;display:flex;align-items:center;padding:0 18px;gap:12px;flex-shrink:0}
+.mark{width:28px;height:28px;background:#1E3A8A;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#BFDBFE;font-family:var(--font-mono);font-size:13px;font-weight:500;flex-shrink:0}
+.brand{font-size:13px;font-weight:500;color:#0D1525;letter-spacing:-.01em}
+.hdivider{width:1px;height:14px;background:#DDE4EE}
+.hstat{font-size:11px;color:#8393A8;display:flex;align-items:center;gap:5px}
+.hsp{flex:1}
+.hlive{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:500;color:#059669;background:#ECFDF5;border:0.5px solid #6EE7B7;border-radius:20px;padding:3px 10px}
+.ldot{width:6px;height:6px;border-radius:50%;background:#10B981;animation:pp 2s infinite;flex-shrink:0}
+@keyframes pp{0%,100%{opacity:1}50%{opacity:.25}}
+.hdate{font-size:11px;font-family:var(--font-mono);color:#8393A8;background:#F4F6FB;border:0.5px solid #DDE4EE;border-radius:4px;padding:3px 8px}
+
+.toolbar{display:flex;align-items:center;gap:8px;padding:12px 16px 0;flex-shrink:0}
+.tlbl{font-size:10px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:#8393A8;margin-right:2px}
+.tbtn{font-size:11px;font-weight:500;padding:4px 12px;border-radius:5px;border:0.5px solid #DDE4EE;background:#fff;color:#3A4B65;cursor:pointer;transition:all .15s;user-select:none}
+.tbtn.on{background:#EBF2FF;border-color:#93C5FD;color:#1D4ED8}
+.tbtn:hover:not(.on){background:#F4F6FB}
+.tsp{flex:1}
+.tcount{font-size:11px;color:#8393A8;font-family:var(--font-mono)}
+
+.ybanner{margin:10px 16px 0;background:#fff;border:0.5px solid #FCD34D;border-radius:var(--border-radius-md);overflow:hidden;flex-shrink:0}
+.yhdr{display:flex;align-items:center;gap:9px;padding:10px 14px;cursor:pointer;transition:background .1s;user-select:none}
+.yhdr:hover{background:#FFFEF5}
+.yic{width:18px;height:18px;background:#FEF3C7;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+.ytitle{font-size:12px;font-weight:500;color:#0D1525;flex:1}
+.ybadge{font-size:10px;font-family:var(--font-mono);color:#92400E;background:#FEF3C7;border:0.5px solid #F59E0B;border-radius:4px;padding:1px 7px}
+.ytog{font-size:11px;color:#A8B5C8;transition:transform .18s}
+.ybody{padding:4px 14px 12px;display:none}
+.ybody.open{display:block}
+.ygroup{margin-top:8px}
+.yglbl{font-size:10px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#8393A8;margin-bottom:4px;display:flex;align-items:center;gap:5px}
+.yglbl::before{content:'';width:3px;height:3px;border-radius:50%;background:#60A5FA;flex-shrink:0}
+.ytask{font-size:11px;color:#3A4B65;padding:2.5px 0;display:flex;align-items:baseline;gap:7px}
+.ytask::before{content:'·';color:#C4CEDF;font-size:16px;line-height:.9}
+
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:10px 16px 16px;overflow-y:auto;flex:1}
+.grid::-webkit-scrollbar{width:4px}
+.grid::-webkit-scrollbar-thumb{background:#C4CEDF;border-radius:2px}
+.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+
+.card{background:#fff;border:0.5px solid #DDE4EE;border-radius:var(--border-radius-lg);display:flex;flex-direction:column;overflow:hidden;transition:border-color .15s}
+.card:hover{border-color:#93C5FD}
+.card.dim{opacity:.7}
+
+.ch{padding:13px 14px 10px}
+.ch-top{display:flex;align-items:flex-start;justify-content:space-between;gap:6px;margin-bottom:3px}
+.ch-title{font-size:12px;font-weight:500;color:#0D1525;line-height:1.4;flex:1}
+.ch-title.d{color:#8393A8;font-weight:400}
+.ch-pct{font-size:24px;font-weight:500;font-family:var(--font-mono);line-height:1;color:#0D1525;flex-shrink:0}
+.ch-pct.ok{color:#047857}
+.ch-pct.dim-c{color:#A8B5C8}
+.ch-unit{font-size:13px;color:#A8B5C8;font-weight:400}
+.ch-path{font-size:10px;color:#A8B5C8;font-family:var(--font-mono);margin-bottom:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch-track{height:4px;background:#EDF1F8;border-radius:2px;overflow:hidden}
+.ch-fill{height:100%;border-radius:2px;background:#2563EB;transition:width .9s cubic-bezier(.4,0,.2,1)}
+.ch-fill.ok{background:#059669}
+.ch-fill.gr{background:#C4CEDF}
+
+.ct{padding:9px 14px 10px;flex:1;display:flex;flex-direction:column;gap:7px}
+
+.tsec-lbl{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}
+.tdot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.s-doing .tsec-lbl{color:#6D28D9}
+.s-doing .tdot{background:#7C3AED;animation:pp 1.5s infinite}
+.s-todo .tsec-lbl{color:#64748B}
+.s-todo .tdot{background:#94A3B8}
+.s-done .tsec-lbl{color:#047857}
+.s-done .tdot{background:#10B981}
+
+.trow{font-size:11px;color:#3A4B65;line-height:1.45;padding:2px 0;display:flex;align-items:baseline;gap:5px;word-break:break-all}
+.trow::before{content:'·';color:#C4CEDF;font-size:15px;line-height:.85;flex-shrink:0}
+.trow.done-r{color:#A8B5C8;text-decoration:line-through;text-decoration-color:#C4CEDF}
+.trow.doing-r{color:#0D1525;font-weight:500}
+.trow.doing-r::before{color:#7C3AED}
+
+.cf{border-top:0.5px solid #EDF1F8;padding:8px 14px;display:flex;align-items:center;gap:7px}
+.cf-icon{font-size:13px;color:#C4CEDF;flex-shrink:0}
+.cf-txt{flex:1;font-size:10px;color:#A8B5C8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cf-time{font-size:10px;font-family:var(--font-mono);color:#C4CEDF;flex-shrink:0}
+.chip{display:inline-flex;align-items:center;gap:3px;font-family:var(--font-mono);font-size:10px;color:#3A4B65;background:#F4F6FB;border:0.5px solid #DDE4EE;border-radius:4px;padding:3px 8px;cursor:pointer;transition:all .15s;flex-shrink:0;white-space:nowrap}
+.chip:hover{border-color:#2563EB;color:#1D4ED8;background:#EBF2FF}
+.chip:active{transform:scale(.97)}
+
+.ended-hint{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#A8B5C8;padding:32px}
+.eh-ic{font-size:28px;opacity:.4}
+.eh-t{font-size:13px;font-weight:500;color:#8393A8}
+.eh-s{font-size:11px;max-width:200px;text-align:center;line-height:1.6}
+
+.toast-wrap{position:relative;height:0;overflow:visible;z-index:99}
+.toast{display:none;position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);background:#0D1525;color:#fff;font-size:11px;font-weight:500;padding:6px 14px;border-radius:5px;white-space:nowrap}
+.toast.show{display:block;animation:fdin .2s ease}
+@keyframes fdin{from{opacity:0;transform:translateX(-50%) translateY(4px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+</style>
+
+<h2 style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Claude Board — 科技风交互稿，多会话任务看板，含昨日未完成汇总</h2>
+
+<div class="board">
+
+  <div class="hdr">
+    <div class="mark">◈</div>
+    <span class="brand">Claude Board</span>
+    <div class="hdivider"></div>
+    <span class="hstat"><div class="ldot"></div> 实时同步</span>
+    <div class="hsp"></div>
+    <span class="hlive"><div class="ldot"></div>已连接 · 3个会话</span>
+    <span class="hdate" id="hdate"></span>
+  </div>
+
+  <div class="toolbar">
+    <span class="tlbl">视图</span>
+    <div class="tbtn on" id="btnA" onclick="switchView('active')">进行中</div>
+    <div class="tbtn" id="btnE" onclick="switchView('ended')">已结束</div>
+    <div class="tsp"></div>
+    <span class="tcount" id="tcount"></span>
+  </div>
+
+  <div class="ybanner" id="ybanner">
+    <div class="yhdr" onclick="toggleY()">
+      <div class="yic">⚡</div>
+      <div class="ytitle">昨日未完成</div>
+      <span class="ybadge">5 项</span>
+      <span class="ytog" id="ytog">▼</span>
+    </div>
+    <div class="ybody" id="ybody">
+      <div class="ygroup">
+        <div class="yglbl">quiccut</div>
+        <div class="ytask">实现音频波形可视化</div>
+        <div class="ytask">添加硬件编码器检测</div>
+        <div class="ytask">编写解码器单元测试</div>
+      </div>
+      <div class="ygroup">
+        <div class="yglbl">nexus</div>
+        <div class="ytask">实现指数退避重连</div>
+        <div class="ytask">添加重连状态 UI</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+</div>
+<div class="toast-wrap"><div class="toast" id="toast"></div></div>
+
+<script>
+const D = {
+  active:[
+    {id:'abc123de',title:'构建 WebCodecs 编解码管线',proj:'~/projects/quiccut',pct:40,
+     doing:['实现 480p 代理编码器'],
+     todo:['添加硬件编码器检测','编写解码器单元测试','编写 API 文档'],
+     done:['设计分块流式 API','搭建 VideoDecoder 池'],
+     conv:{txt:'hardware encoder 怎么检测，ffmpeg 还是 OS API？',ts:'3分钟前'}},
+    {id:'bb9923fc',title:'修复代理编码器崩溃',proj:'~/projects/quiccut',pct:100,
+     doing:[],todo:[],
+     done:['复现崩溃堆栈','定位 NAL unit 截断问题','添加边界检查与单元测试'],
+     conv:{txt:'480p proxy 在某些 H264 文件上会 crash',ts:'2小时前'}},
+    {id:'def789uv',title:'SSH 断连自动重连',proj:'~/projects/nexus',pct:33,
+     doing:[],
+     todo:['实现指数退避重连','添加重连状态 UI'],
+     done:['调试 PTY 断连逻辑'],
+     conv:{txt:'SSH 断连后要怎么自动重连？',ts:'1小时前'}}
+  ],
+  ended:[
+    {id:'cc4412ab',title:'音频波形可视化',proj:'~/projects/quiccut',pct:75,
+     doing:[],todo:['添加缩放交互'],done:['波形数据提取','Canvas 渲染','颜色主题适配'],
+     conv:{txt:'波形渲染在低采样率下有锯齿',ts:'昨天'}},
+    {id:'ee1133bb',title:'Flutter SSH 终端搭建',proj:'~/projects/nexus',pct:100,
+     doing:[],todo:[],
+     done:['集成 dartssh2','接入 xterm.dart','PTY 输出解析','ANSI 处理','UI 布局'],
+     conv:{txt:'xterm 字体渲染在 iOS 上偏小',ts:'2天前'}}
+  ]
+};
+
+let view='active';
+let yOpen=false;
+let toastTimer=null;
+
+function fmt(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
+
+function switchView(v){
+  view=v;
+  document.getElementById('btnA').className='tbtn'+(v==='active'?' on':'');
+  document.getElementById('btnE').className='tbtn'+(v==='ended'?' on':'');
+  document.getElementById('ybanner').style.display=v==='active'?'':'none';
+  renderGrid();
+}
+
+function toggleY(){
+  yOpen=!yOpen;
+  document.getElementById('ybody').className='ybody'+(yOpen?' open':'');
+  document.getElementById('ytog').style.transform=yOpen?'rotate(180deg)':'';
+}
+
+function cp(text){
+  navigator.clipboard?.writeText(text);
+  const el=document.getElementById('toast');
+  el.textContent='已复制';el.classList.add('show');
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),1800);
+}
+
+function renderGrid(){
+  const list=view==='active'?D.active:D.ended;
+  const grid=document.getElementById('grid');
+  document.getElementById('tcount').textContent=list.length+'个会话';
+
+  if(!list.length){
+    grid.innerHTML='';
+    grid.style.display='flex';
+    grid.style.flexDirection='column';
+    grid.innerHTML=`<div class="ended-hint"><div class="eh-ic"><i class="ti ti-archive" aria-hidden="true"></i></div><div class="eh-t">暂无已结束会话</div><div class="eh-s">会话结束后将在这里归档显示</div></div>`;
+    return;
+  }
+
+  grid.removeAttribute('style');
+  grid.className='grid'+(list.length===2?' two':'');
+
+  grid.innerHTML=list.map(s=>{
+    const ok=s.pct===100;
+    const isEnded=view==='ended';
+    const fillCls=ok?'ok':isEnded?'gr':'';
+    const pctCls=ok?'ok':isEnded?'dim-c':'';
+
+    const doingRows=s.doing.map(t=>`<div class="trow doing-r">${fmt(t)}</div>`).join('');
+    const todoRows=s.todo.map(t=>`<div class="trow">${fmt(t)}</div>`).join('');
+    const doneRows=s.done.map(t=>`<div class="trow done-r">${fmt(t)}</div>`).join('');
+
+    const doingSec=s.doing.length?`<div class="s-doing"><div class="tsec-lbl"><div class="tdot"></div>进行中</div>${doingRows}</div>`:'';
+    const todoSec=s.todo.length?`<div class="s-todo"><div class="tsec-lbl"><div class="tdot"></div>待办 ${s.todo.length} 项</div>${todoRows}</div>`:'';
+    const doneSec=s.done.length?`<div class="s-done"><div class="tsec-lbl"><div class="tdot"></div>${ok?'全部完成 ✓':'已完成 '+s.done.length+' 项'}</div>${doneRows}</div>`:'';
+
+    return`<div class="card${isEnded?' dim':''}">
+      <div class="ch">
+        <div class="ch-top">
+          <div class="ch-title${isEnded?' d':''}">${fmt(s.title)}</div>
+          <div class="ch-pct ${pctCls}">${s.pct}<span class="ch-unit">%</span></div>
+        </div>
+        <div class="ch-path">${fmt(s.proj)}</div>
+        <div class="ch-track"><div class="ch-fill ${fillCls}" style="width:0%" data-w="${s.pct}"></div></div>
+      </div>
+      <div class="ct">
+        ${doingSec}${todoSec}${doneSec}
+        ${!doingSec&&!todoSec&&!doneSec?'<div style="font-size:11px;color:#A8B5C8;font-style:italic">暂无任务</div>':''}
+      </div>
+      <div class="cf">
+        <i class="ti ti-message cf-icon" aria-hidden="true"></i>
+        <div class="cf-txt">${fmt(s.conv.txt)}</div>
+        <div class="cf-time">${fmt(s.conv.ts)}</div>
+        <div class="chip" onclick="cp('claude --resume ${fmt(s.id)}')" title="复制恢复命令">
+          <i class="ti ti-player-play" style="font-size:10px" aria-hidden="true"></i>恢复
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    document.querySelectorAll('.ch-fill[data-w]').forEach(el=>{
+      el.style.width=el.dataset.w+'%';
+    });
+  }));
+}
+
+document.getElementById('hdate').textContent=new Date().toLocaleDateString('zh-CN',{month:'numeric',day:'numeric',weekday:'short'});
+renderGrid();
+</script>

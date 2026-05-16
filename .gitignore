@@ -1,0 +1,29 @@
+# 本地 Claude Code 配置（用户专属）
+.claude/settings.local.json
+
+# 调试/临时文件
+*.log
+usage_debug.log
+latest
+{hooks,scripts}/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# SQLite（看板数据库在 ~/.claude-board/，但以防有人把 db 放进项目目录）
+*.db
+*.db-shm
+*.db-wal
+
+# 编辑器/系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
