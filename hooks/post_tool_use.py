@@ -14,6 +14,10 @@ import os
 import sys
 import urllib.request
 import urllib.error
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+from _board import debug_log, should_skip   # noqa: E402
 
 DAEMON = os.environ.get("CLAUDE_BOARD_URL", "http://localhost:7820")
 
@@ -125,9 +129,16 @@ def main():
     except Exception:
         return
 
+    debug_log("PostToolUse", payload, {"tool": payload.get("tool_name")})
+
     session_id = (payload.get("session_id")
                   or os.environ.get("CLAUDE_SESSION_ID", "")).strip()
     if not session_id:
+        return
+
+    skip, reason = should_skip(payload)
+    if skip:
+        debug_log("PostToolUse-SKIPPED", payload, {"reason": reason})
         return
 
     tool_name = payload.get("tool_name", "")

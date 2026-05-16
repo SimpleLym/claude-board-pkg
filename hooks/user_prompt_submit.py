@@ -13,6 +13,9 @@ import sys
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from _board import debug_log, should_skip   # noqa: E402
+
 DAEMON = os.environ.get("CLAUDE_BOARD_URL", "http://localhost:7820")
 MAX_USER_CHARS = 4000
 
@@ -56,23 +59,27 @@ def derive_title(prompt: str) -> str:
 
 def main():
     try:
-        # 必须读 buffer 再显式 UTF-8 解码：Windows 上 sys.stdin 默认 cp936/GBK，
-        # 会把 Claude Code 传入的 UTF-8 JSON 解坏，导致中文乱码进库。
         raw = sys.stdin.buffer.read()
         payload = json.loads(raw.decode("utf-8") if raw else "{}")
     except Exception:
         return
+
+    debug_log("UserPromptSubmit", payload)
 
     session_id = (payload.get("session_id")
                   or os.environ.get("CLAUDE_SESSION_ID", "")).strip()
     if not session_id:
         return
 
+    skip, reason = should_skip(payload)
+    if skip:
+        debug_log("UserPromptSubmit-SKIPPED", payload, {"reason": reason})
+        return
+
     prompt = (payload.get("prompt") or "").strip()
     if not prompt:
         return
 
-    # 跳过内建 slash 命令（如 /usage /help），它们会带来"幽灵会话"
     if is_slash_command_artifact(prompt):
         return
 

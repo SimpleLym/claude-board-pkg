@@ -18,6 +18,7 @@ SKILL_DIR  = Path(__file__).parent
 BOARD_DIR  = Path.home() / ".claude-board"
 HOOKS_DST  = BOARD_DIR / "hooks"
 HOOK_FILES = [
+    "_board.py",          # 共享辅助：debug 日志 + subagent 过滤
     "session_start.py",
     "user_prompt_submit.py",
     "post_tool_use.py",
@@ -59,12 +60,13 @@ def _hook_entry(script_name: str, matcher: str | None = None) -> dict:
     return entry
 
 
-def _already_has(hooks_list: list, marker: str) -> bool:
+def _find_existing(hooks_list: list, marker: str):
+    """返回包含我们 hook script 的那一项（带 matcher / hooks 子结构），找不到返回 None。"""
     for h in hooks_list:
         for hh in h.get("hooks", []):
             if marker in hh.get("command", ""):
-                return True
-    return False
+                return h
+    return None
 
 
 def install_hooks():
@@ -103,17 +105,29 @@ def install_hooks():
     ]
 
     added = 0
+    updated = 0
     for event, script, matcher in plan:
         lst = hooks_cfg.setdefault(event, [])
         marker = script  # filename uniquely identifies our hook
-        if _already_has(lst, marker):
-            continue
-        lst.append(_hook_entry(script, matcher))
-        added += 1
+        existing = _find_existing(lst, marker)
+        if existing is None:
+            lst.append(_hook_entry(script, matcher))
+            added += 1
+        else:
+            # 即便条目已存在，也强制把 matcher 更新到最新——避免老版本
+            # matcher（如 "TodoWrite"）漏掉新加的 TaskCreate / Edit 等工具
+            new_matcher = matcher
+            old_matcher = existing.get("matcher")
+            if old_matcher != new_matcher:
+                if new_matcher is None:
+                    existing.pop("matcher", None)
+                else:
+                    existing["matcher"] = new_matcher
+                updated += 1
 
     settings_f.write_text(json.dumps(cfg, indent=2, ensure_ascii=False),
                           encoding="utf-8")
-    print(f"  + {settings_f}  ({added} new hook entries)")
+    print(f"  + {settings_f}  (+{added} new, ~{updated} matcher updated)")
 
 
 def check_deps():
