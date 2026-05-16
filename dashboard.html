@@ -1547,8 +1547,8 @@ function buildCardHTML(s){
       <span class="stat dur" title="会话时长（从 ${esc(s.created_at||'未知')} 起）">
         <span class="stat-ic">⏱</span><span class="stat-num">${esc(durStr)}</span>
       </span>
-      <span class="stat ctx${ctxCls}" title="最近 context 大小：${fmtNum(ctxTok)} / ${fmtNum(MAX_CTX)} (${(ctxPct*100).toFixed(1)}%)">
-        <span class="stat-ic">📊</span><span class="stat-num">${ctxTok ? fmtNum(ctxTok) : '—'}</span>
+      <span class="stat ctx${ctxCls}" title="最近 context 占用：${fmtNum(ctxTok)} / ${fmtNum(MAX_CTX)} (${(ctxPct*100).toFixed(1)}%)">
+        <span class="stat-ic">📊</span><span class="stat-num">${ctxTok ? (ctxPct*100).toFixed(0)+'%' : '—'}</span>
       </span>
     </div>`;
 

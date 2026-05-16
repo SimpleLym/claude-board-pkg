@@ -29,9 +29,17 @@ claude-board 把这些信息集中起来：
 
 ## 截图速览
 
-- 主看板（`http://localhost:7820/`）：每个 Claude Code 会话一张卡，含会话时间线、进度条、悬浮规划面板
-- 全部任务汇总（`http://localhost:7820/tasks`）：3 列看板，session 任务 + TASKS.md 项目计划合并展示
-- 消息全文窗：点卡片内任意一条消息 → 弹出 markdown 渲染的全文，可一键切换原文/复制
+**主看板** `http://localhost:7820/` —— 每个 Claude Code 会话一张卡，含会话时间线、token / 时长 / context 统计、规划进度。
+
+![主看板](docs/1.png)
+
+**点紫色"规划 N/M"徽章 → 右侧滑出悬浮规划面板**，展示三栏任务（进行中/待办/已完成），可收起成竖条。
+
+![悬浮规划面板](docs/2.png)
+
+**全部规划任务汇总** `http://localhost:7820/tasks` —— 3 列看板，把所有 session 的 TodoWrite 任务和 TASKS.md 项目计划合并展示，可按项目/会话分组。顶部官方 `5h / 7d` 配额带游戏电量条样式。
+
+![汇总页](docs/3.png)
 
 ---
 
