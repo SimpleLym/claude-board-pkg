@@ -56,6 +56,7 @@ board({
 ```
 
 **Title rules:**
+
 - Derive from the user's first message (verb + object format)
 - Examples: "Refactor auth pipeline", "Build transcript editor", "Fix WebCodecs decoder"
 - Update later with `session_title` if first message was ambiguous
@@ -92,6 +93,7 @@ board({
 ```
 
 **Content length guidance:**
+
 - User messages: first 2000 chars is fine; truncate very long pastes
 - Assistant summaries: 1-4 sentences; outcomes-focused, not step-by-step
 
@@ -124,13 +126,13 @@ This matches how `TodoWrite` works (full state, not deltas).
 
 ## 4. When to call what
 
-| Trigger | Call |
-|---|---|
-| Conversation starts | `session_init` |
-| User sends a message | `message` (role: user) |
-| You finish your response | `message` (role: assistant) |
-| After any `TodoWrite` | `task_sync` (hook does this auto) |
-| User asks to update title | `session_title` |
+| Trigger                   | Call                              |
+| ------------------------- | --------------------------------- |
+| Conversation starts       | `session_init`                    |
+| User sends a message      | `message` (role: user)            |
+| You finish your response  | `message` (role: assistant)       |
+| After any `TodoWrite`     | `task_sync` (hook does this auto) |
+| User asks to update title | `session_title`                   |
 
 ---
 
@@ -216,14 +218,14 @@ Only GitHub-style checkbox lines are parsed; everything else is ignored:
 2. **Mark what you're starting.** When you begin work on a TASKS.md item,
    use `Edit` to add `🔄` after the checkbox on that line. Do this *before*
    creating in-session tasks so the dashboard's "正在做" bar lights up.
-
+   
    ```
    - [ ] 重构图片上传模块        →     - [ ] 🔄 重构图片上传模块
    ```
 
 3. **Mark what you finish.** When the item is fully done, use `Edit` to flip
    `[ ]` → `[x]` **and remove the 🔄**.
-
+   
    ```
    - [ ] 🔄 重构图片上传模块     →     - [x] 重构图片上传模块
    ```

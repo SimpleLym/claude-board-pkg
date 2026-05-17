@@ -1,7 +1,5 @@
 # Claude 任务看板（claude-board）
 
-**简体中文** · [English](./README.en.md)
-
 一个本地、实时的 Web 看板，把同一台机器上所有 Claude Code 会话的**任务规划**、**对话历史**、**项目级 TASKS.md 计划**集中到一个浏览器页面里。
 
 不再为"我之前那个会话规划了啥来着？" 翻几个终端、也不再担心跨会话的长线任务被遗忘。
@@ -20,28 +18,20 @@
 
 claude-board 把这些信息集中起来：
 
-| 数据源 | 体现在看板上 |
-|---|---|
-| 每个 Claude Code 会话的对话历史 | 卡片里的"我 / ◈"消息流，支持 markdown 渲染 |
-| `TodoWrite` / `TaskCreate` 的临时规划 | 卡片右下角紫色"规划 N/M"徽章 + 点击展开侧栏 |
-| 项目根目录的 `TASKS.md`（持久规划） | 与会话任务**并入同一个 3 列看板**，蓝色"📋 TASKS.md"徽章标识 |
-| 上一天没做完的任务 | 主看板顶部黄色"昨日未完成"折叠横幅，跨天自动展开 |
+| 数据源                              | 体现在看板上                                   |
+| -------------------------------- | ---------------------------------------- |
+| 每个 Claude Code 会话的对话历史           | 卡片里的"我 / ◈"消息流，支持 markdown 渲染            |
+| `TodoWrite` / `TaskCreate` 的临时规划 | 卡片右下角紫色"规划 N/M"徽章 + 点击展开侧栏               |
+| 项目根目录的 `TASKS.md`（持久规划）          | 与会话任务**并入同一个 3 列看板**，蓝色"📋 TASKS.md"徽章标识 |
+| 上一天没做完的任务                        | 主看板顶部黄色"昨日未完成"折叠横幅，跨天自动展开                |
 
 ---
 
 ## 截图速览
 
-**主看板** `http://localhost:7820/` —— 每个 Claude Code 会话一张卡，含会话时间线、token / 时长 / context 统计、规划进度。
-
-![主看板](docs/1.png)
-
-**点紫色"规划 N/M"徽章 → 右侧滑出悬浮规划面板**，展示三栏任务（进行中/待办/已完成），可收起成竖条。
-
-![悬浮规划面板](docs/2.png)
-
-**全部规划任务汇总** `http://localhost:7820/tasks` —— 3 列看板，把所有 session 的 TodoWrite 任务和 TASKS.md 项目计划合并展示，可按项目/会话分组。顶部官方 `5h / 7d` 配额带游戏电量条样式。
-
-![汇总页](docs/3.png)
+- 主看板（`http://localhost:7820/`）：每个 Claude Code 会话一张卡，含会话时间线、进度条、悬浮规划面板
+- 全部任务汇总（`http://localhost:7820/tasks`）：3 列看板，session 任务 + TASKS.md 项目计划合并展示
+- 消息全文窗：点卡片内任意一条消息 → 弹出 markdown 渲染的全文，可一键切换原文/复制
 
 ---
 
@@ -74,12 +64,12 @@ python E:\path\to\claude-board-pkg\setup.py --project
 
 这一步会注册四个 hook：
 
-| Hook | 触发时机 | 作用 |
-|---|---|---|
-| `SessionStart` | 新会话开始 | 注册到 daemon，扫描 TASKS.md |
-| `UserPromptSubmit` | 用户每发一条消息 | 推送对话 + 自动取标题 |
-| `PostToolUse` | TodoWrite / TaskCreate / TaskUpdate / Edit / Write | 同步任务状态；编辑 TASKS.md 时秒级触发重扫 |
-| `Stop` | Claude 回复完成 | 抓取最近回复推送到看板 |
+| Hook               | 触发时机                                               | 作用                         |
+| ------------------ | -------------------------------------------------- | -------------------------- |
+| `SessionStart`     | 新会话开始                                              | 注册到 daemon，扫描 TASKS.md     |
+| `UserPromptSubmit` | 用户每发一条消息                                           | 推送对话 + 自动取标题               |
+| `PostToolUse`      | TodoWrite / TaskCreate / TaskUpdate / Edit / Write | 同步任务状态；编辑 TASKS.md 时秒级触发重扫 |
+| `Stop`             | Claude 回复完成                                        | 抓取最近回复推送到看板                |
 
 > 改了源码后**重跑一次 setup.py** 把新文件同步到 `~/.claude-board/`，老的 hook 配置会被合并保留。
 
@@ -159,10 +149,10 @@ $env:CLAUDE_BOARD_PORT="9000"; python E:\path\to\claude-board-pkg\daemon.py
 
 **协作约定**（写在 `SKILL.md` 第 8 节）：
 
-| 时机 | 操作 |
-|---|---|
-| 开始做某项 | 用 Edit 在 `[ ]` 后面加 `🔄` |
-| 完成 | 用 Edit 把 `[ ]` 改成 `[x]` 并移除 `🔄` |
+| 时机             | 操作                                 |
+| -------------- | ---------------------------------- |
+| 开始做某项          | 用 Edit 在 `[ ]` 后面加 `🔄`            |
+| 完成             | 用 Edit 把 `[ ]` 改成 `[x]` 并移除 `🔄`   |
 | daemon 是否自动写文件 | **否**——只能 Claude 自己改，保证每次写入都在对话里可见 |
 
 ---
@@ -192,13 +182,13 @@ claude-board-pkg/
 
 ## HTTP / WebSocket 接口
 
-| 路径 | 方法 | 说明 |
-|---|---|---|
-| `/` | GET | 主看板 HTML |
-| `/tasks` | GET | 全部任务汇总 HTML |
-| `/api/state` | GET | 当前完整 state 快照（JSON） |
-| `/api/event` | POST | hooks/外部工具上报事件 |
-| `/ws` | WS | 看板订阅实时推送 |
+| 路径           | 方法   | 说明                  |
+| ------------ | ---- | ------------------- |
+| `/`          | GET  | 主看板 HTML            |
+| `/tasks`     | GET  | 全部任务汇总 HTML         |
+| `/api/state` | GET  | 当前完整 state 快照（JSON） |
+| `/api/event` | POST | hooks/外部工具上报事件      |
+| `/ws`        | WS   | 看板订阅实时推送            |
 
 **事件类型**（POST `/api/event`）：
 
