@@ -172,10 +172,18 @@ body{font-family:var(--font-sans);font-size:13px;color:#0D1525;
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
   grid-auto-rows:minmax(440px,1fr);
   gap:10px;padding:10px 16px 16px;overflow-y:auto;flex:1}
-.grid::-webkit-scrollbar{width:6px}
+.grid::-webkit-scrollbar{width:6px;height:8px}
 .grid::-webkit-scrollbar-track{background:transparent}
 .grid::-webkit-scrollbar-thumb{background:#C4CEDF;border-radius:3px}
 .grid.empty-mode{display:flex;align-items:center;justify-content:center}
+
+/* 进行中视图：单行横向滚动 ——「现场感」更强，多终端时一眼扫一排 */
+.grid.row-mode{display:flex;flex-direction:row;flex-wrap:nowrap;
+  align-items:stretch;
+  overflow-x:auto;overflow-y:hidden;
+  grid-template-columns:none;grid-auto-rows:none}
+.grid.row-mode .card{flex:0 0 360px;width:360px;max-width:360px;height:100%;max-height:none}
+.grid.row-mode.empty-mode{display:flex;align-items:center;justify-content:center;overflow:hidden}
 
 .card{background:#fff;border:0.5px solid #DDE4EE;border-radius:var(--border-radius-lg);
   display:flex;flex-direction:column;overflow:hidden;transition:border-color .15s}
@@ -1011,6 +1019,8 @@ function renderAll(){
   if (view === 'tasks'){
     tvRender();
   } else {
+    // 进行中视图用横排单行；已结束维持网格
+    document.getElementById('grid').classList.toggle('row-mode', view === 'active');
     renderGrid(list);
   }
 }
@@ -1686,6 +1696,7 @@ function renderGrid(list){
   // 按目标顺序构建/复用
   const target = [];
   const toAutoScroll = new Set();   // 新建 / 替换的卡片，渲染完滚到底
+  const toRestoreScroll = new Map();  // 替换的卡片但不在底：还原 scrollTop
   for (const s of list){
     const sig = cardSig(s);
     let el = existing.get(s.id);
@@ -1693,15 +1704,21 @@ function renderGrid(list){
       // 签名相同：复用整张卡，连 DOM 都不动
       existing.delete(s.id);
     } else if (el){
-      // 签名变了：只替换这一张。记下被替换前的 feed 滚动位置，决定是否要"粘底"
+      // 签名变了：只替换这一张。先记被替换前的 feed 滚动位置：
+      //   - 在底（<30px 余量）→ 替换后继续滚到底（新消息可见）
+      //   - 不在底（用户在翻历史）→ 替换后还原 scrollTop，避免视图被甩到顶
       const oldFeed = el.querySelector('.feed');
-      const wasAtBottom = oldFeed
-        ? (oldFeed.scrollHeight - oldFeed.scrollTop - oldFeed.clientHeight) < 30
-        : true;
+      let wasAtBottom = true;
+      let prevScrollTop = 0;
+      if (oldFeed){
+        prevScrollTop = oldFeed.scrollTop;
+        wasAtBottom = (oldFeed.scrollHeight - oldFeed.scrollTop - oldFeed.clientHeight) < 30;
+      }
       const fresh = htmlToEl(buildCardHTML(s));
       el.replaceWith(fresh);
       el = fresh;
       if (wasAtBottom) toAutoScroll.add(el);
+      else             toRestoreScroll.set(el, prevScrollTop);
       existing.delete(s.id);
     } else {
       // 新增
@@ -1721,7 +1738,7 @@ function renderGrid(list){
     }
   }
 
-  // 渐隐控制 + 自动滚到底（用 RAF 等浏览器完成布局再量）
+  // 渐隐控制 + 滚动还原（用 RAF 等浏览器完成布局再量）
   requestAnimationFrame(() => {
     for (const el of grid.querySelectorAll('.fmsg-text')){
       const over = el.scrollHeight - el.clientHeight > 1;
@@ -1730,6 +1747,10 @@ function renderGrid(list){
     for (const card of toAutoScroll){
       const feed = card.querySelector('.feed');
       if (feed) feed.scrollTop = feed.scrollHeight;
+    }
+    for (const [card, top] of toRestoreScroll){
+      const feed = card.querySelector('.feed');
+      if (feed) feed.scrollTop = top;
     }
   });
 }
