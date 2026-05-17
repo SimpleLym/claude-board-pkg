@@ -11,6 +11,7 @@ Claude Board - PostToolUse hook
 
 import json
 import os
+import re
 import sys
 import urllib.request
 import urllib.error
@@ -59,6 +60,48 @@ def _handle_todowrite(sid: str, project: str, payload: dict):
     post_event({"type": "task_sync", "session_id": sid, "tasks": tasks})
 
 
+_TASK_NUM_RE = re.compile(r"Task\s*#?(\d+)", re.IGNORECASE)
+
+
+def _extract_task_id(tool_resp) -> str:
+    """TaskCreate 的 tool_response 形态会变，按已知顺序兜底：
+      - {"task": {"id": "3", ...}}                  ← 当前 Claude Code 实际形态
+      - {"taskId": "1"} / {"id": 1} / {"task_id": "1"}（结构化）
+      - {"content"|"text"|"output"|"result"|"message": "Task #1 created ..."}
+      - "Task #1 created successfully: ..."         ← 早期纯文本
+    必须拿到和 TaskUpdate(taskId=...) 一致的 id，否则后续状态更新对不上号。"""
+    if isinstance(tool_resp, dict):
+        task = tool_resp.get("task")
+        if isinstance(task, dict):
+            for k in ("id", "taskId", "task_id"):
+                v = task.get(k)
+                if v not in (None, ""):
+                    return str(v)
+        for k in ("taskId", "task_id", "id"):
+            v = tool_resp.get(k)
+            if v not in (None, ""):
+                return str(v)
+        for k in ("content", "text", "output", "result", "message"):
+            v = tool_resp.get(k)
+            if isinstance(v, str):
+                m = _TASK_NUM_RE.search(v)
+                if m:
+                    return m.group(1)
+            elif isinstance(v, list):
+                for blk in v:
+                    if isinstance(blk, dict):
+                        txt = blk.get("text") or blk.get("content") or ""
+                        if isinstance(txt, str):
+                            m = _TASK_NUM_RE.search(txt)
+                            if m:
+                                return m.group(1)
+    elif isinstance(tool_resp, str):
+        m = _TASK_NUM_RE.search(tool_resp)
+        if m:
+            return m.group(1)
+    return ""
+
+
 def _handle_task_create(sid: str, project: str, payload: dict):
     tool_input = payload.get("tool_input") or {}
     tool_resp  = payload.get("tool_response") or {}
@@ -67,13 +110,9 @@ def _handle_task_create(sid: str, project: str, payload: dict):
     if not subject:
         return
 
-    # 从 tool_response 提取新 task id；不同 Claude Code 版本字段可能不同，宽松匹配
-    tid = ""
-    if isinstance(tool_resp, dict):
-        tid = str(tool_resp.get("id") or tool_resp.get("taskId")
-                  or tool_resp.get("task_id") or "")
+    tid = _extract_task_id(tool_resp)
     if not tid:
-        # 兜底：用 subject 的 hash 当 id（保证后续 TaskUpdate 找不到也不影响展示）
+        # 兜底：用 subject 的 hash 当 id；老路径 —— TaskUpdate 找不到时 daemon 会自动建占位行
         import hashlib
         tid = "tc-" + hashlib.md5(subject.encode("utf-8")).hexdigest()[:10]
 
@@ -92,6 +131,12 @@ def _handle_task_update(sid: str, project: str, payload: dict):
 
     status = tool_input.get("status")  # 可能是 None（只改 subject 等）
     subject = (tool_input.get("subject") or "").strip()
+
+    # deleted 走单独的删除事件，避免把 "deleted" 当成第 4 种状态留在看板上
+    if status == "deleted":
+        _ensure_session(sid, project)
+        post_event({"type": "task_delete", "session_id": sid, "task_id": tid})
+        return
 
     event = {"type": "task_upsert", "session_id": sid, "task_id": tid}
     if status:

@@ -36,6 +36,8 @@ except ImportError:
     raise
 
 PORT = int(os.environ.get("CLAUDE_BOARD_PORT", "7820"))
+# 默认监所有网卡，方便 LAN/手机访问；要锁回本机就设 CLAUDE_BOARD_HOST=127.0.0.1
+HOST = os.environ.get("CLAUDE_BOARD_HOST", "0.0.0.0")
 DB_PATH = Path.home() / ".claude-board" / "board.db"
 DASHBOARD_PATH = Path(__file__).parent / "dashboard.html"
 TASKS_PATH     = Path(__file__).parent / "tasks.html"
@@ -624,9 +626,10 @@ def process_event(data: dict):
                 WHERE session_id=? AND task_id=?
             """, (new_content, new_status, ts, sid, tid))
         else:
-            if not content:
-                return False
-            # 新插入：sort_order 用现有最大 + 1
+            # 没找到行：可能是 TaskCreate 的 hook payload 没抓到这个 tid（不同
+            # Claude Code 版本 tool_response 字段会变）。这里宽容地建占位行，
+            # 至少保证状态变化（in_progress / completed）能实时显示。
+            placeholder = content or f"Task #{tid}"
             row = db.execute(
                 "SELECT COALESCE(MAX(sort_order), -1)+1 AS n FROM tasks WHERE session_id=?",
                 (sid,)
@@ -635,7 +638,7 @@ def process_event(data: dict):
                 INSERT INTO tasks (task_id, session_id, content, status, priority,
                                    sort_order, created_at, updated_at)
                 VALUES (?,?,?,?,?,?,?,?)
-            """, (tid, sid, content, status or "pending", "medium",
+            """, (tid, sid, placeholder, status or "pending", "medium",
                   row["n"], ts, ts))
         db.execute("UPDATE sessions SET updated_at=? WHERE id=?", (ts, sid))
 
@@ -1050,17 +1053,42 @@ def create_app() -> web.Application:
 
 # ─── Entry Point ──────────────────────────────────────────────────────────────
 
+def _lan_ips() -> list[str]:
+    """枚举本机非回环 IPv4，方便 banner 里直接告诉用户用哪个地址。stdlib-only。"""
+    import socket
+    out: set[str] = set()
+    try:
+        for ip in socket.gethostbyname_ex(socket.gethostname())[2]:
+            if not ip.startswith("127."):
+                out.add(ip)
+    except Exception:
+        pass
+    # 兜底：UDP 探一下默认外网路由，能拿到出口网卡的 IP
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("223.5.5.5", 80))
+            out.add(s.getsockname()[0])
+    except Exception:
+        pass
+    return sorted(out)
+
+
 if __name__ == "__main__":
+    urls = [f"http://localhost:{PORT}"]
+    if HOST in ("0.0.0.0", "::"):
+        urls += [f"http://{ip}:{PORT}" for ip in _lan_ips()]
     banner = (
         "\n  Claude Board\n"
-        f"    Dashboard  ->  http://localhost:{PORT}\n"
-        "    Events     ->  POST /api/event\n"
-        "    State      ->  GET  /api/state\n"
-        f"    DB         ->  {DB_PATH}\n"
+        + "\n".join(f"    Dashboard  ->  {u}" for u in urls) + "\n"
+        + "    Events     ->  POST /api/event\n"
+        + "    State      ->  GET  /api/state\n"
+        + f"    DB         ->  {DB_PATH}\n"
+        + (f"    Host       ->  {HOST} (LAN exposed; set CLAUDE_BOARD_HOST=127.0.0.1 to lock down)\n"
+           if HOST in ("0.0.0.0", "::") else "")
     )
     try:
         print(banner)
     except UnicodeEncodeError:
         sys.stdout.buffer.write(banner.encode("utf-8", errors="replace"))
     app = create_app()
-    web.run_app(app, host="127.0.0.1", port=PORT, print=None)
+    web.run_app(app, host=HOST, port=PORT, print=None)

@@ -254,6 +254,18 @@ body{font-family:var(--font-sans);font-size:13px;color:#0D1525;
 .fmsg:hover{background:#F4F6FB}
 .fmsg.assistant:hover{background:#FAF5FF}
 
+/* 「运行中」气泡：用户消息已落、Claude 还没回时显示 */
+.fmsg.running{cursor:default;background:linear-gradient(90deg,#F3E8FF 0%,#FAF5FF 100%)}
+.fmsg.running:hover{background:linear-gradient(90deg,#F3E8FF 0%,#FAF5FF 100%)}
+.fmsg.running .fmsg-role{background:#F3E8FF;color:#6D28D9}
+.fmsg-running-dots{display:inline-flex;gap:3px;align-items:center;color:#6D28D9}
+.fmsg-running-dots .d{width:4px;height:4px;border-radius:50%;background:currentColor;
+  animation:rundot 1.2s infinite ease-in-out}
+.fmsg-running-dots .d:nth-child(2){animation-delay:.2s}
+.fmsg-running-dots .d:nth-child(3){animation-delay:.4s}
+.fmsg-running-lbl{font-size:11px;color:#6D28D9;margin-left:6px;font-style:italic}
+@keyframes rundot{0%,80%,100%{opacity:.25;transform:scale(.7)}40%{opacity:1;transform:scale(1)}}
+
 /* 消息全文悬浮窗 */
 .msg-backdrop{position:fixed;inset:0;background:rgba(13,21,37,.55);
   display:none;align-items:center;justify-content:center;z-index:60;animation:fdin .15s ease}
@@ -1551,14 +1563,25 @@ function buildCardHTML(s){
     : '';
 
   const rounds = s.recent_rounds || [];
+  // 最后一轮是 user 且 session 未结束 → Claude 还在跑，feed 末尾挂「运行中」气泡
+  const lastRound = rounds.length ? rounds[rounds.length - 1] : null;
+  const isRunning = !isEnded && lastRound && lastRound.role === 'user';
+  const runningBubble = isRunning ? `
+    <div class="fmsg running" title="Claude 正在生成回复…">
+      <div class="fmsg-role">◈</div>
+      <div class="fmsg-running-dots">
+        <span class="d"></span><span class="d"></span><span class="d"></span>
+        <span class="fmsg-running-lbl">运行中…</span>
+      </div>
+    </div>` : '';
   const feed = rounds.length
     ? rounds.map((r, i) => `
         <div class="fmsg ${esc(r.role)}" title="点击查看全文"
              onclick="event.stopPropagation();openMsg('${esc(s.id)}', ${i})">
           <div class="fmsg-role">${r.role === 'user' ? '我' : '◈'}</div>
           <div class="fmsg-text md">${renderMarkdown(r.content || '')}</div>
-        </div>`).join('')
-    : '<div class="feed-empty">尚无对话记录</div>';
+        </div>`).join('') + runningBubble
+    : (isRunning ? runningBubble : '<div class="feed-empty">尚无对话记录</div>');
 
   const lastTs = rounds.length
     ? timeAgo(rounds[rounds.length - 1].timestamp)
