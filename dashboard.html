@@ -104,6 +104,8 @@ body{font-family:var(--font-sans);font-size:13px;color:#0D1525;
 .husage-act:hover{background:#EBF2FF;color:#1D4ED8}
 .husage-act.spin svg{animation:spin .8s linear infinite}
 .husage-act svg{width:13px;height:13px}
+.husage-act:disabled,.husage-act.cooldown{opacity:.45;cursor:not-allowed;background:transparent;color:#94A3B8}
+.husage-act:disabled:hover,.husage-act.cooldown:hover{background:transparent;color:#94A3B8}
 @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 
 .husage-cfg{font-size:12px;color:#94A3B8;cursor:pointer;padding:2px 4px;
@@ -751,6 +753,24 @@ function timeAgo(iso){
   return d + ' 天前';
 }
 
+// 距离未来 ISO 时间还剩多久 —— usage 窗口的"还有 N 小时 N 分钟后重置"
+function timeUntil(iso){
+  if (!iso) return '';
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff <= 0) return '马上';
+  const totalMin = Math.floor(diff / 60000);
+  if (totalMin < 1) return '不到 1 分钟';
+  const totalHour = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (totalHour < 1) return `${m} 分钟`;
+  if (totalHour < 24){
+    return m ? `${totalHour} 小时 ${m} 分钟` : `${totalHour} 小时`;
+  }
+  const d = Math.floor(totalHour / 24);
+  const h = totalHour % 24;
+  return h ? `${d} 天 ${h} 小时` : `${d} 天`;
+}
+
 function copyText(txt, hint){
   navigator.clipboard?.writeText(txt);
   showToast(hint || '已复制');
@@ -895,6 +915,11 @@ function renderUsageWindow(){
   if (!oauth && !u.computed_at && !oauthErr){ el.style.display = 'none'; return; }
   el.style.display = '';
 
+  // daemon 拉到 429 → 自动锁住 ↻ 60s。不管当前是 oauth 路径还是回退路径，都该锁。
+  if (oauthErr && oauthErr.includes('HTTP 429') && Date.now() >= _oauthCooldownUntil){
+    _setRefreshCooldown(60);
+  }
+
   const refreshBtn = `
     <button class="husage-act" id="husage-refresh" onclick="refreshOAuth(event)"
             title="立刻向 Anthropic 拉取最新配额">${_REFRESH_SVG}</button>`;
@@ -908,8 +933,8 @@ function renderUsageWindow(){
     const srcDot = `<span class="husage-src oauth"
       title="来自 Anthropic 官方 /api/oauth/usage · 拉取于 ${esc(fetchedAt)}"></span>`;
 
-    const reset5h = fh.resets_at ? `重置于 ${new Date(fh.resets_at).toLocaleString('zh-CN')}` : '';
-    const reset7d = sd.resets_at ? `重置于 ${new Date(sd.resets_at).toLocaleString('zh-CN')}` : '';
+    const reset5h = fh.resets_at ? `还剩 ${timeUntil(fh.resets_at)} 重置` : '';
+    const reset7d = sd.resets_at ? `还剩 ${timeUntil(sd.resets_at)} 重置` : '';
 
     const parts = [srcDot];
     if (fh.utilization != null){
@@ -927,13 +952,14 @@ function renderUsageWindow(){
     }
     parts.push(refreshBtn);
     el.innerHTML = parts.join('');
+    if (Date.now() < _oauthCooldownUntil) _applyCooldownToBtn();
     return;
   }
 
   // 回退：本地估算
   const lim = effectiveLimits();
   const srcDot = oauthErr
-    ? `<span class="husage-src fail" title="官方拉取失败：${esc(oauthErr.slice(0,120))}（点击 ↻ 重试）"></span>`
+    ? `<span class="husage-src fail" title="${esc(_oauthErrorHint(oauthErr))}"></span>`
     : `<span class="husage-src local" title="本地估算·扫描 ~/.claude/projects/"></span>`;
 
   const fallbackCell = (label, prompts, tokens, max) => {
@@ -957,11 +983,56 @@ function renderUsageWindow(){
     `<span class="husage-cfg" onclick="openPlanPicker(event)" title="设置套餐上限">⚙</span>`,
     refreshBtn,
   ].join('');
+  if (Date.now() < _oauthCooldownUntil) _applyCooldownToBtn();
+}
+
+// 把 daemon 抛出来的原始错误转成人话 —— 401 给具体动作指引，429 提示限流
+function _oauthErrorHint(err){
+  if (!err) return '';
+  if (err.includes('HTTP 401')) {
+    return 'Anthropic token 已过期：去任意 Claude Code 终端发一条消息会触发自动刷新，然后再点 ↻';
+  }
+  if (err.includes('HTTP 429')) {
+    return '官方接口被频控（429），稍等一会儿再试';
+  }
+  return '官方拉取失败：' + err.slice(0, 120) + '（点击 ↻ 重试）';
+}
+
+// ↻ 冷却：避免短时间内重复点导致 429
+let _oauthCooldownUntil = 0;
+let _oauthCooldownTimer = null;
+function _setRefreshCooldown(seconds){
+  _oauthCooldownUntil = Date.now() + seconds * 1000;
+  _applyCooldownToBtn();
+  if (_oauthCooldownTimer) clearInterval(_oauthCooldownTimer);
+  _oauthCooldownTimer = setInterval(_applyCooldownToBtn, 1000);
+}
+function _applyCooldownToBtn(){
+  const btn = document.getElementById('husage-refresh');
+  if (!btn) return;
+  const left = Math.max(0, Math.ceil((_oauthCooldownUntil - Date.now()) / 1000));
+  if (left <= 0){
+    btn.disabled = false;
+    btn.classList.remove('cooldown', 'spin');
+    btn.title = '立刻向 Anthropic 拉取最新配额';
+    if (_oauthCooldownTimer){ clearInterval(_oauthCooldownTimer); _oauthCooldownTimer = null; }
+    return;
+  }
+  btn.disabled = true;
+  btn.classList.add('cooldown');
+  btn.classList.remove('spin');
+  btn.title = `被官方频控，剩 ${left}s 可重试`;
 }
 
 function refreshOAuth(ev){
   ev.stopPropagation();
   const btn = document.getElementById('husage-refresh');
+  // 冷却中：拒绝请求，避免又触一次 429
+  if (Date.now() < _oauthCooldownUntil){
+    const left = Math.ceil((_oauthCooldownUntil - Date.now()) / 1000);
+    showToast(`冷却中，${left}s 后再试`);
+    return;
+  }
   if (btn) btn.classList.add('spin');
   fetch('/api/event', {
     method:'POST', headers:{'Content-Type':'application/json'},
@@ -969,11 +1040,21 @@ function refreshOAuth(ev){
   }).then(r => r.json()).then(j => {
     if (j && j.changed){
       showToast('已刷新 Anthropic 配额');
+      return;
+    }
+    const err = (j && j.error) || '未知错误';
+    if (err.includes('HTTP 429')){
+      _setRefreshCooldown(60);
+      showToast('被官方频控，冷却 60s');
+    } else if (err.includes('HTTP 401')){
+      showToast('token 已过期：去 Claude Code 发条消息会自动刷新');
     } else {
-      showToast('刷新失败：' + ((j && j.error) || '未知错误'));
+      showToast('刷新失败：' + err);
     }
   }).catch(e => showToast('网络错误：' + e.message))
-    .finally(() => { if (btn) btn.classList.remove('spin'); });
+    .finally(() => {
+      if (btn && !btn.classList.contains('cooldown')) btn.classList.remove('spin');
+    });
 }
 
 // 当前 session 自己 in_progress 的任务（来自 TodoWrite/TaskCreate）
